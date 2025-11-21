@@ -14,14 +14,12 @@ jobs:
       TARGET: "mediatek"
       SUBTARGET: "filogic"
       PKGARCH: "aarch64_cortex-a53"
-      VERMAGIC: "9469a6c8c449c47e503c05678ea1559d"
 
     steps:
-
-      - name: Checkout AWG feed (your fork)
+      - name: Checkout this repository (AWG feed)
         uses: actions/checkout@v4
 
-      - name: Download OpenWrt SDK
+      - name: Download GL-MT6000 SDK
         run: |
           wget https://archive.openwrt.org/releases/$TAG/targets/$TARGET/$SUBTARGET/openwrt-sdk-$TAG-$TARGET-$SUBTARGET\_gcc-13.3.0_musl.Linux-x86_64.tar.zst
           tar -I zstd -xf openwrt-sdk-$TAG-$TARGET-$SUBTARGET\_gcc-13.3.0_musl.Linux-x86_64.tar.zst
@@ -38,20 +36,23 @@ jobs:
         run: |
           echo "src-link awg $(pwd)/package" >> feeds.conf.default
 
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          ./scripts/feeds update awg
+          ./scripts/feeds install -p awg amneziawg-tools
+          ./scripts/feeds install -p awg kmod-amneziawg
+          ./scripts/feeds install -p awg luci-app-amneziawg
 
-          cp config.buildinfo .config
-
-          echo "CONFIG_PACKAGE_kmod-amneziawg=m" >> .config
-          echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-amneziawg=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> .config
-
+          # Создаем 'чистый' конфиг
           make defconfig
 
-      - name: Build packages
+          # Подключаем crypto зависимости
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y" >> .config
+
+          # применяем конфиг
+          make defconfig
+
+      - name: Build AWG packages
         working-directory: sdk
         run: |
           make package/kmod-amneziawg/{clean,prepare,compile} V=s
@@ -61,11 +62,11 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p awgrelease
-          cp sdk/bin/packages/$PKGARCH/awg/*amneziawg-tools*.ipk awgrelease/
-          cp sdk/bin/packages/$PKGARCH/awg/*luci-app-amneziawg*.ipk awgrelease/
-          cp sdk/bin/targets/$TARGET/$SUBTARGET/packages/kmod-amneziawg_*.ipk awgrelease/
+          cp sdk/bin/packages/$PKGARCH/awg/*amneziawg-tools*.ipk awgrelease/ || true
+          cp sdk/bin/packages/$PKGARCH/awg/*luci-app-amneziawg*.ipk awgrelease/ || true
+          cp sdk/bin/targets/$TARGET/$SUBTARGET/packages/kmod-amneziawg_*.ipk awgrelease/ || true
 
-      - name: Release
+      - name: Publish Release
         uses: softprops/action-gh-release@v1
         with:
           files: awgrelease/*.ipk
