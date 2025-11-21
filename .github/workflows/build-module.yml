@@ -1,4 +1,4 @@
-name: Build AWG for GL-MT6000 (SDK)
+name: Build AWG via SDK (GL-MT6000)
 
 on:
   push:
@@ -20,28 +20,43 @@ jobs:
       - name: Checkout AWG feed (your repo)
         uses: actions/checkout@v4
 
+      # ----------------------------------------------------------
+      # 1. — ¿◊»¬¿≈Ã SDK
+      # ----------------------------------------------------------
       - name: Download SDK
         run: |
           wget https://archive.openwrt.org/releases/${TAG}/targets/${TARGET}/${SUBTARGET}/openwrt-sdk-${TAG}-${TARGET}-${SUBTARGET}_gcc-13.3.0_musl.Linux-x86_64.tar.zst
           tar -I zstd -xf openwrt-sdk-${TAG}-${TARGET}-${SUBTARGET}_gcc-13.3.0_musl.Linux-x86_64.tar.zst
           mv openwrt-sdk-${TAG}-${TARGET}-${SUBTARGET}_gcc-13.3.0_musl.Linux-x86_64 sdk
 
-      - name: Add AWG feed into SDK
+      # ----------------------------------------------------------
+      # 2.  Œœ»–”≈Ã œ¿ ≈“€ ¬Õ”“–‹ SDK
+      # ----------------------------------------------------------
+      - name: Add AWG packages into SDK feed
         run: |
           mkdir -p sdk/feeds/awg
           cp -r kmod-amneziawg sdk/feeds/awg/
           cp -r amneziawg-tools sdk/feeds/awg/
           cp -r luci-app-amneziawg sdk/feeds/awg/
 
-          echo "src-link awg $(pwd)/sdk/feeds/awg" >> sdk/feeds.conf.default
+          echo "src-link awg feeds/awg" >> sdk/feeds.conf.default
 
+      # ----------------------------------------------------------
+      # 3. ¿ “»¬¿÷»ﬂ FEEDS
+      # ----------------------------------------------------------
       - name: Configure feeds in SDK
         working-directory: sdk
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Prepare .config with AWG support
+          echo "[INFO] AWG feed contents:"
+          ls -R package/feeds/awg
+
+      # ----------------------------------------------------------
+      # 4. √Œ“Œ¬»Ã .config
+      # ----------------------------------------------------------
+      - name: Prepare .config with AWG and crypto libs
         working-directory: sdk
         run: |
           wget https://archive.openwrt.org/releases/${TAG}/targets/${TARGET}/${SUBTARGET}/config.buildinfo -O .config
@@ -64,27 +79,34 @@ jobs:
 
           make defconfig
 
-      - name: Inject WireGuard sources (required by AWG)
+      # ----------------------------------------------------------
+      # 5. œŒƒ »ƒ€¬¿≈Ã WireGuard (AWG backend)
+      # ----------------------------------------------------------
+      - name: Inject WireGuard kernel sources
         working-directory: sdk
         run: |
-          echo ">>> Download Linux 6.6.110"
+          echo ">>> Download Linux 6.6.110 (wireguard)"
           wget https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.6.110.tar.xz
           tar -xf linux-6.6.110.tar.xz linux-6.6.110/drivers/net/wireguard
 
-          echo ">>> Locate kernel dir in SDK"
           KDIR=$(echo build_dir/target-${TARGET}_${ARCH}_musl/linux-${TARGET}_${SUBTARGET}/linux-*)
-          echo "KDIR = $KDIR"
+          echo "KERNEL DIR = $KDIR"
 
-          echo ">>> Inject WG sources"
           mkdir -p "$KDIR/drivers/net"
           rm -rf "$KDIR/drivers/net/wireguard"
           cp -r linux-6.6.110/drivers/net/wireguard "$KDIR/drivers/net/"
 
+      # ----------------------------------------------------------
+      # 6. —¡Œ– ¿ KMOD
+      # ----------------------------------------------------------
       - name: Build kmod-amneziawg
         working-directory: sdk
         run: |
           make package/kmod-amneziawg/compile V=s
 
+      # ----------------------------------------------------------
+      # 7. œÓ‚ÂÍ‡ vermagic
+      # ----------------------------------------------------------
       - name: Check vermagic
         working-directory: sdk
         run: |
@@ -95,22 +117,31 @@ jobs:
             exit 1
           fi
 
-      - name: Build tools + luci-app-amneziawg
+      # ----------------------------------------------------------
+      # 8. —¡Œ– ¿ œŒÀ‹«Œ¬¿“≈À‹— »’ œ¿ ≈“Œ¬
+      # ----------------------------------------------------------
+      - name: Build AWG userspace + LuCI
         working-directory: sdk
         run: |
           make package/amneziawg-tools/compile V=s
           make package/luci-app-amneziawg/compile V=s
 
+      # ----------------------------------------------------------
+      # 9. —Œ«ƒ¿≈Ã ¿–“≈‘¿ “€
+      # ----------------------------------------------------------
       - name: Collect artifacts
         run: |
           mkdir -p awgrelease
-          cp sdk/bin/packages/${ARCH}/awg/*amneziawg-tools*.ipk awgrelease/ 2>/dev/null || true
-          cp sdk/bin/packages/${ARCH}/awg/*luci-app-amneziawg*.ipk awgrelease/ 2>/dev/null || true
-          cp sdk/bin/targets/${TARGET}/${SUBTARGET}/packages/kmod-amneziawg_*.ipk awgrelease/ 2>/dev/null || true
+          cp sdk/bin/packages/${ARCH}/awg/*amneziawg-tools*.ipk awgrelease/
+          cp sdk/bin/packages/${ARCH}/awg/*luci-app-amneziawg*.ipk awgrelease/
+          cp sdk/bin/targets/${TARGET}/${SUBTARGET}/packages/kmod-amneziawg_*.ipk awgrelease/
 
           echo "Artifacts:"
           ls -l awgrelease
 
+      # ----------------------------------------------------------
+      # 10. ¬€√–”« ¿ –≈À»«¿
+      # ----------------------------------------------------------
       - name: Release packages
         uses: softprops/action-gh-release@v1
         with:
