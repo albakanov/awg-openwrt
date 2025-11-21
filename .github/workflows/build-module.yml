@@ -13,18 +13,21 @@ jobs:
       - name: Checkout AWG feed
         uses: actions/checkout@v4
 
+      # Download the official SDK for OpenWrt 24.10.4 (filogic MT6000)
       - name: Download OpenWrt SDK (24.10.4 filogic)
         run: |
           wget https://archive.openwrt.org/releases/24.10.4/targets/mediatek/filogic/openwrt-sdk-24.10.4-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
           tar -I zstd -xf openwrt-sdk-24.10.4-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.zst
           mv openwrt-sdk-24.10.4-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64 sdk
 
+      # Copy AWG sources into SDK
       - name: Copy AWG packages into SDK
         run: |
           cp -r amneziawg-tools sdk/package/
           cp -r kmod-amneziawg sdk/package/
           cp -r luci-app-amneziawg sdk/package/
 
+      # Main build step
       - name: Build packages (with WireGuard injection)
         working-directory: sdk
         run: |
@@ -33,10 +36,10 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-          echo ">>> Download OpenWrt config.buildinfo for 24.10.4 filogic"
+          echo ">>> Fetch OpenWrt kernel config"
           wget https://archive.openwrt.org/releases/24.10.4/targets/mediatek/filogic/config.buildinfo -O .config
 
-          echo ">>> Enable WireGuard, AWG and crypto in .config"
+          echo ">>> Enable WireGuard + crypto + AWG"
           cat << 'EOF' >> .config
           CONFIG_PACKAGE_kmod-wireguard=m
           CONFIG_WIREGUARD=m
@@ -45,15 +48,34 @@ jobs:
           CONFIG_PACKAGE_amneziawg-tools=y
           CONFIG_PACKAGE_luci-app-amneziawg=y
 
-          CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
-          CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
-          CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20=y
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=y
+          CONFIG_PACKAGE_kmod-crypto-lib-curve25519=y
+          CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=y
+          CONFIG_PACKAGE_kmod-crypto-poly1305=y
+          CONFIG_PACKAGE_kmod-crypto-acompress=y
+          CONFIG_PACKAGE_kmod-crypto-hash=y
+          CONFIG_PACKAGE_kmod-crypto-kpp=y
+          CONFIG_PACKAGE_kmod-crypto-user=y
+          CONFIG_PACKAGE_kmod-crypto-misc=y
+
+          CONFIG_CRYPTO_CHACHA20=y
+          CONFIG_CRYPTO_CHACHA20_NEON=y
+          CONFIG_CRYPTO_POLY1305=y
+          CONFIG_CRYPTO_POLY1305_NEON=y
+          CONFIG_CRYPTO_CURVE25519=y
+          CONFIG_CRYPTO_CURVE25519_NEON=y
+          CONFIG_CRYPTO_LIB_CURVE25519_GENERIC=y
+          CONFIG_CRYPTO_LIB_CHACHA20_GENERIC=y
+          CONFIG_CRYPTO_LIB_POLY1305_GENERIC=y
+          CONFIG_CRYPTO_LIB_POLY1305=y
+          CONFIG_CRYPTO_LIB_CHACHA20=y
           EOF
 
-          echo ">>> Run defconfig"
+          echo ">>> Applying defconfig"
           make defconfig
 
-          echo ">>> Download Linux 6.6.110 sources (for WireGuard)"
+          echo ">>> Download Linux 6.6.110 sources for WireGuard"
           wget https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.6.110.tar.xz
           tar -xf linux-6.6.110.tar.xz linux-6.6.110/drivers/net/wireguard
 
@@ -61,14 +83,12 @@ jobs:
           KDIR=$(echo build_dir/target-*_cortex-a53_musl/linux-*/linux-*)
           echo "Kernel dir: $KDIR"
 
-          echo ">>> Inject missing WireGuard sources"
+          echo ">>> Injecting WireGuard sources"
           mkdir -p "$KDIR/drivers/net"
           rm -rf "$KDIR/drivers/net/wireguard"
           cp -r linux-6.6.110/drivers/net/wireguard "$KDIR/drivers/net/"
 
-          ls -R "$KDIR/drivers/net/wireguard" || true
-
-          echo ">>> Build kmod-amneziawg (this will also build kmod-wireguard)"
+          echo ">>> Build kmod-amneziawg (this triggers kmod-wireguard build)"
           make package/kmod-amneziawg/{clean,prepare,compile} V=s
 
           echo ">>> Build amneziawg-tools"
@@ -77,6 +97,7 @@ jobs:
           echo ">>> Build luci-app-amneziawg"
           make package/luci-app-amneziawg/{clean,prepare,compile} V=s
 
+      # Prepare final .ipk files
       - name: Prepare artifacts
         run: |
           mkdir -p awgrelease
