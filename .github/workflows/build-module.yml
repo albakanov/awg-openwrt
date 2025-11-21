@@ -34,10 +34,14 @@ jobs:
       # ----------------------------------------------------------
       - name: Add AWG packages into SDK feed
         run: |
-          mkdir -p sdk/feeds/awg
-          cp -r kmod-amneziawg sdk/feeds/awg/
-          cp -r amneziawg-tools sdk/feeds/awg/
-          cp -r luci-app-amneziawg sdk/feeds/awg/
+          FEED_DIR="$(pwd)/sdk/feeds/awg"
+
+          echo "[INFO] Creating feed dir: $FEED_DIR"
+          mkdir -p "$FEED_DIR"
+
+          cp -r kmod-amneziawg "$FEED_DIR/"
+          cp -r amneziawg-tools "$FEED_DIR/"
+          cp -r luci-app-amneziawg "$FEED_DIR/"
 
           echo "src-link awg feeds/awg" >> sdk/feeds.conf.default
 
@@ -47,11 +51,14 @@ jobs:
       - name: Configure feeds in SDK
         working-directory: sdk
         run: |
+          echo "[INFO] feeds.conf.default:"
+          cat feeds.conf.default
+
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-          echo "[INFO] AWG feed contents:"
-          ls -R package/feeds/awg
+          echo "[INFO] Contents of package/feeds:"
+          ls -R package/feeds || true
 
       # ----------------------------------------------------------
       # 4. √Œ“Œ¬»Ã .config
