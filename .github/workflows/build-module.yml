@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout AWG feed
         uses: actions/checkout@v4
 
@@ -26,24 +25,20 @@ jobs:
           cp -r kmod-amneziawg sdk/package/
           cp -r luci-app-amneziawg sdk/package/
 
-      - name: Insert WireGuard upstream sources (kernel 6.6)
-        run: |
-          git clone --depth=1 https://git.zx2c4.com/wireguard-linux-compat wgsrc
-          mkdir -p sdk/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.6.110/drivers/net/wireguard
-          cp -r wgsrc/src/* sdk/build_dir/target-aarch64_cortex-a53_musl/linux-mediatek_filogic/linux-6.6.110/drivers/net/wireguard
-
-      - name: Build packages
+      - name: Build packages (inject WireGuard sources)
         working-directory: sdk
         run: |
+          set -e
+
           echo "src-link local $(pwd)/package" >> feeds.conf.default
-          
+
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-          echo ">>> Generate .config"
+          echo ">>> Fetch OpenWrt config.buildinfo"
           wget https://archive.openwrt.org/releases/24.10.4/targets/mediatek/filogic/config.buildinfo -O .config
 
-          echo ">>> Enable crypto + AWG (NO WIREGUARD!)"
+          echo ">>> Enable crypto + AWG (NO kmod-wireguard)"
           cat << 'EOF' >> .config
 CONFIG_PACKAGE_kmod-amneziawg=m
 CONFIG_PACKAGE_amneziawg-tools=y
@@ -72,7 +67,23 @@ CONFIG_CRYPTO_LIB_POLY1305=y
 CONFIG_CRYPTO_LIB_CHACHA20=y
 EOF
 
+          echo ">>> Run defconfig"
           make defconfig
+
+          echo ">>> Download Linux 6.6.110 for WireGuard sources"
+          wget https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.6.110.tar.xz
+          tar -xf linux-6.6.110.tar.xz linux-6.6.110/drivers/net/wireguard
+
+          echo ">>> Locate kernel dir in SDK"
+          KDIR=$(echo build_dir/target-*_cortex-a53_musl/linux-*/linux-*)
+          echo "Kernel dir: $KDIR"
+
+          echo ">>> Inject WireGuard sources into kernel tree"
+          mkdir -p "$KDIR/drivers/net"
+          rm -rf "$KDIR/drivers/net/wireguard"
+          cp -r linux-6.6.110/drivers/net/wireguard "$KDIR/drivers/net/"
+
+          ls -R "$KDIR/drivers/net/wireguard" || true
 
           echo ">>> Build kmod-amneziawg"
           make package/kmod-amneziawg/{clean,prepare,compile} V=s
@@ -86,9 +97,9 @@ EOF
       - name: Prepare artifacts
         run: |
           mkdir -p awgrelease
-          cp sdk/bin/packages/aarch64_cortex-a53/*/amneziawg-tools_*.ipk awgrelease/
-          cp sdk/bin/packages/aarch64_cortex-a53/*/luci-app-amneziawg_*.ipk awgrelease/
-          cp sdk/bin/targets/mediatek/filogic/packages/kmod-amneziawg_*.ipk awgrelease/
+          cp sdk/bin/packages/aarch64_cortex-a53/*/amneziawg-tools_*.ipk awgrelease/ || true
+          cp sdk/bin/packages/aarch64_cortex-a53/*/luci-app-amneziawg_*.ipk awgrelease/ || true
+          cp sdk/bin/targets/mediatek/filogic/packages/kmod-amneziawg_*.ipk awgrelease/ || true
 
       - name: Release
         uses: softprops/action-gh-release@v1
