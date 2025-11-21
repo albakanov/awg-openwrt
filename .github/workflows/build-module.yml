@@ -25,7 +25,7 @@ jobs:
           cp -r kmod-amneziawg sdk/package/
           cp -r luci-app-amneziawg sdk/package/
 
-      - name: Build packages
+      - name: Build packages (with WireGuard injection)
         working-directory: sdk
         run: |
           echo "src-link local $(pwd)/package" >> feeds.conf.default
@@ -35,16 +35,36 @@ jobs:
 
           make defconfig
 
+          echo ">>> Download Linux 6.6.110 sources (for WireGuard)"
+          wget https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.6.110.tar.xz
+          tar -xf linux-6.6.110.tar.xz linux-6.6.110/drivers/net/wireguard
+
+          echo ">>> Locate kernel directory in SDK"
+          KDIR=$(echo build_dir/target-*/linux-*/linux-*)
+          echo "Kernel dir: $KDIR"
+
+          echo ">>> Inject missing WireGuard sources"
+          mkdir -p "$KDIR/drivers/net"
+          rm -rf "$KDIR/drivers/net/wireguard"
+          cp -r linux-6.6.110/drivers/net/wireguard "$KDIR/drivers/net/"
+
+          ls -R "$KDIR/drivers/net/wireguard" || true
+
+          echo ">>> Build kmod-amneziawg"
           make package/kmod-amneziawg/{clean,prepare,compile} V=s
+
+          echo ">>> Build amneziawg-tools"
           make package/amneziawg-tools/{clean,prepare,compile} V=s
+
+          echo ">>> Build luci-app-amneziawg"
           make package/luci-app-amneziawg/{clean,prepare,compile} V=s
 
       - name: Prepare artifacts
         run: |
           mkdir -p awgrelease
-          cp sdk/bin/packages/aarch64_cortex-a53/*/amneziawg-tools_*.ipk awgrelease/
-          cp sdk/bin/packages/aarch64_cortex-a53/*/luci-app-amneziawg_*.ipk awgrelease/
-          cp sdk/bin/targets/mediatek/filogic/packages/kmod-amneziawg_*.ipk awgrelease/
+          cp sdk/bin/packages/aarch64_cortex-a53/*/amneziawg-tools_*.ipk awgrelease/ || true
+          cp sdk/bin/packages/aarch64_cortex-a53/*/luci-app-amneziawg_*.ipk awgrelease/ || true
+          cp sdk/bin/targets/mediatek/filogic/packages/kmod-amneziawg_*.ipk awgrelease/ || true
 
       - name: Release
         uses: softprops/action-gh-release@v1
