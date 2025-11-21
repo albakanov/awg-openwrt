@@ -33,6 +33,24 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+          echo ">>> Download OpenWrt config.buildinfo for 24.10.4 filogic"
+          wget https://archive.openwrt.org/releases/24.10.4/targets/mediatek/filogic/config.buildinfo -O .config
+
+          echo ">>> Enable WireGuard, AWG and crypto in .config"
+          cat << 'EOF' >> .config
+          CONFIG_PACKAGE_kmod-wireguard=m
+          CONFIG_WIREGUARD=m
+
+          CONFIG_PACKAGE_kmod-amneziawg=m
+          CONFIG_PACKAGE_amneziawg-tools=y
+          CONFIG_PACKAGE_luci-app-amneziawg=y
+
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
+          CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
+          EOF
+
+          echo ">>> Run defconfig"
           make defconfig
 
           echo ">>> Download Linux 6.6.110 sources (for WireGuard)"
@@ -40,7 +58,7 @@ jobs:
           tar -xf linux-6.6.110.tar.xz linux-6.6.110/drivers/net/wireguard
 
           echo ">>> Locate kernel directory in SDK"
-          KDIR=$(echo build_dir/target-*/linux-*/linux-*)
+          KDIR=$(echo build_dir/target-*_cortex-a53_musl/linux-*/linux-*)
           echo "Kernel dir: $KDIR"
 
           echo ">>> Inject missing WireGuard sources"
@@ -50,7 +68,7 @@ jobs:
 
           ls -R "$KDIR/drivers/net/wireguard" || true
 
-          echo ">>> Build kmod-amneziawg"
+          echo ">>> Build kmod-amneziawg (this will also build kmod-wireguard)"
           make package/kmod-amneziawg/{clean,prepare,compile} V=s
 
           echo ">>> Build amneziawg-tools"
