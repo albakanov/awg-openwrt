@@ -61,16 +61,16 @@ jobs:
           wget https://archive.openwrt.org/releases/${TAG}/targets/${TARGET}/${SUBTARGET}/config.buildinfo -O .config
 
           cat << 'EOF' >> .config
-CONFIG_PACKAGE_kmod-amneziawg=m
-CONFIG_PACKAGE_amneziawg-tools=y
-CONFIG_PACKAGE_luci-app-amneziawg=y
-
-CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
-CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
-CONFIG_PACKAGE_kmod-crypto-lib-curve25519=m
-CONFIG_PACKAGE_kmod-crypto-poly1305=m
-CONFIG_PACKAGE_kmod-crypto-user=m
-EOF
+          CONFIG_PACKAGE_kmod-amneziawg=m
+          CONFIG_PACKAGE_amneziawg-tools=y
+          CONFIG_PACKAGE_luci-app-amneziawg=y
+          
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
+          CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-lib-curve25519=m
+          CONFIG_PACKAGE_kmod-crypto-poly1305=m
+          CONFIG_PACKAGE_kmod-crypto-user=m
+          EOF
 
           make defconfig
 
