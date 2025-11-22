@@ -1,1 +1,7 @@
 .idea/
+sdk/
+*.tar.zst
+build_dir/
+staging_dir/
+bin/
+tmp/
