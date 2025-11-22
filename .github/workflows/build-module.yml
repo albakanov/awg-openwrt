@@ -1,4 +1,4 @@
-name: Build AWG via SDK (GL-MT6000)
+name: Build AWG for GL-MT6000 (SDK)
 
 on:
   push:
@@ -17,53 +17,51 @@ jobs:
       VERMAGIC: "9469a6c8c449c47e503c05678ea1559d"
 
     steps:
-      - name: Checkout AWG feed (your repo)
+      - name: Checkout AWG feed
         uses: actions/checkout@v4
 
-      # ----------------------------------------------------------
-      # 1. — ¿◊»¬¿≈Ã SDK
-      # ----------------------------------------------------------
+      # „=========================================¨
+      # ¶   1. — ¿◊»¬¿≈Ã » –¿—œ¿ Œ¬€¬¿≈Ã SDK       ¶
+      # L=========================================-
       - name: Download SDK
         run: |
           wget https://archive.openwrt.org/releases/${TAG}/targets/${TARGET}/${SUBTARGET}/openwrt-sdk-${TAG}-${TARGET}-${SUBTARGET}_gcc-13.3.0_musl.Linux-x86_64.tar.zst
           tar -I zstd -xf openwrt-sdk-${TAG}-${TARGET}-${SUBTARGET}_gcc-13.3.0_musl.Linux-x86_64.tar.zst
-          mv openwrt-sdk-${TAG}-${TARGET}-${SUBTARGET}_gcc-13.3.0_musl.Linux-x86_64 sdk
 
-      # ----------------------------------------------------------
-      # 2.  Œœ»–”≈Ã œ¿ ≈“€ ¬Õ”“–‹ SDK
-      # ----------------------------------------------------------
+          SDK_DIR=$(find . -maxdepth 1 -type d -name "openwrt-sdk-*")
+          echo "Detected SDK directory: $SDK_DIR"
+
+          mv "$SDK_DIR" sdk
+
+      # „=========================================¨
+      # ¶   2. ƒŒ¡¿¬Àﬂ≈Ã œ¿ ≈“€ AWG ¬ FEED SDK     ¶
+      # L=========================================-
       - name: Add AWG packages into SDK feed
         run: |
-          FEED_DIR="$(pwd)/sdk/feeds/awg"
+          mkdir -p sdk/feeds/awg
 
-          echo "[INFO] Creating feed dir: $FEED_DIR"
-          mkdir -p "$FEED_DIR"
-
-          cp -r kmod-amneziawg "$FEED_DIR/"
-          cp -r amneziawg-tools "$FEED_DIR/"
-          cp -r luci-app-amneziawg "$FEED_DIR/"
+          cp -r kmod-amneziawg sdk/feeds/awg/
+          cp -r amneziawg-tools sdk/feeds/awg/
+          cp -r luci-app-amneziawg sdk/feeds/awg/
 
           echo "src-link awg feeds/awg" >> sdk/feeds.conf.default
 
-      # ----------------------------------------------------------
-      # 3. ¿ “»¬¿÷»ﬂ FEEDS
-      # ----------------------------------------------------------
+      # „=========================================¨
+      # ¶   3. ¿ “»¬¿÷»ﬂ FEEDS                    ¶
+      # L=========================================-
       - name: Configure feeds in SDK
         working-directory: sdk
         run: |
-          echo "[INFO] feeds.conf.default:"
-          cat feeds.conf.default
-
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-          echo "[INFO] Contents of package/feeds:"
+          echo "[INFO] Feeds imported:"
           ls -R package/feeds || true
 
-      # ----------------------------------------------------------
-      # 4. √Œ“Œ¬»Ã .config
-      # ----------------------------------------------------------
-      - name: Prepare .config with AWG and crypto libs
+      # „=========================================¨
+      # ¶   4. √ÂÌÂ‡ˆËˇ .config                  ¶
+      # L=========================================-
+      - name: Prepare .config with AWG + crypto
         working-directory: sdk
         run: |
           wget https://archive.openwrt.org/releases/${TAG}/targets/${TARGET}/${SUBTARGET}/config.buildinfo -O .config
@@ -76,80 +74,76 @@ jobs:
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20=m
           CONFIG_PACKAGE_kmod-crypto-lib-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-lib-curve25519=m
-          CONFIG_PACKAGE_kmod-crypto-chacha20poly1305=m
           CONFIG_PACKAGE_kmod-crypto-poly1305=m
-          CONFIG_PACKAGE_kmod-crypto-acompress=m
-          CONFIG_PACKAGE_kmod-crypto-kpp=m
           CONFIG_PACKAGE_kmod-crypto-user=m
-          CONFIG_PACKAGE_kmod-crypto-misc=m
           EOF
 
           make defconfig
 
-      # ----------------------------------------------------------
-      # 5. œŒƒ »ƒ€¬¿≈Ã WireGuard (AWG backend)
-      # ----------------------------------------------------------
+      # „=========================================¨
+      # ¶   5. œŒƒ »ƒ€¬¿≈Ã WireGuard ˇ‰Ó         ¶
+      # L=========================================-
       - name: Inject WireGuard kernel sources
         working-directory: sdk
         run: |
-          echo ">>> Download Linux 6.6.110 (wireguard)"
           wget https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.6.110.tar.xz
           tar -xf linux-6.6.110.tar.xz linux-6.6.110/drivers/net/wireguard
 
           KDIR=$(echo build_dir/target-${TARGET}_${ARCH}_musl/linux-${TARGET}_${SUBTARGET}/linux-*)
-          echo "KERNEL DIR = $KDIR"
+          echo "Kernel dir = $KDIR"
 
           mkdir -p "$KDIR/drivers/net"
           rm -rf "$KDIR/drivers/net/wireguard"
           cp -r linux-6.6.110/drivers/net/wireguard "$KDIR/drivers/net/"
 
-      # ----------------------------------------------------------
-      # 6. —¡Œ– ¿ KMOD
-      # ----------------------------------------------------------
+      # „=========================================¨
+      # ¶   6. —¡Œ– ¿ KMOD-AMNEZIAWG              ¶
+      # L=========================================-
       - name: Build kmod-amneziawg
         working-directory: sdk
         run: |
           make package/kmod-amneziawg/compile V=s
 
-      # ----------------------------------------------------------
-      # 7. œÓ‚ÂÍ‡ vermagic
-      # ----------------------------------------------------------
+      # „=========================================¨
+      # ¶   7. œÓ‚ÂÍ‡ VERMAGIC                  ¶
+      # L=========================================-
       - name: Check vermagic
         working-directory: sdk
         run: |
           VM=$(cat build_dir/target-${TARGET}_${ARCH}_musl/linux-${TARGET}_${SUBTARGET}/linux-*/.vermagic)
           echo "Built vermagic = $VM"
+
           if [ "$VM" != "${VERMAGIC}" ]; then
-            echo "!!! VERMAGIC MISMATCH !!!"
+            echo "!!! Vermagic mismatch: expected ${VERMAGIC}, got $VM"
             exit 1
           fi
 
-      # ----------------------------------------------------------
-      # 8. —¡Œ– ¿ œŒÀ‹«Œ¬¿“≈À‹— »’ œ¿ ≈“Œ¬
-      # ----------------------------------------------------------
-      - name: Build AWG userspace + LuCI
+      # „=========================================¨
+      # ¶   8. —¡Œ– ¿ USERSpace (TOOLS + LUCI)    ¶
+      # L=========================================-
+      - name: Build AWG tools + LuCI
         working-directory: sdk
         run: |
           make package/amneziawg-tools/compile V=s
           make package/luci-app-amneziawg/compile V=s
 
-      # ----------------------------------------------------------
-      # 9. —Œ«ƒ¿≈Ã ¿–“≈‘¿ “€
-      # ----------------------------------------------------------
+      # „=========================================¨
+      # ¶   9. ¿–“≈‘¿ “€                          ¶
+      # L=========================================-
       - name: Collect artifacts
         run: |
           mkdir -p awgrelease
-          cp sdk/bin/packages/${ARCH}/awg/*amneziawg-tools*.ipk awgrelease/
-          cp sdk/bin/packages/${ARCH}/awg/*luci-app-amneziawg*.ipk awgrelease/
-          cp sdk/bin/targets/${TARGET}/${SUBTARGET}/packages/kmod-amneziawg_*.ipk awgrelease/
 
-          echo "Artifacts:"
+          cp sdk/bin/packages/${ARCH}/awg/*amneziawg-tools*.ipk awgrelease/ || true
+          cp sdk/bin/packages/${ARCH}/awg/*luci-app-amneziawg*.ipk awgrelease/ || true
+          cp sdk/bin/targets/${TARGET}/${SUBTARGET}/packages/kmod-amneziawg_*.ipk awgrelease/ || true
+
           ls -l awgrelease
 
-      # ----------------------------------------------------------
-      # 10. ¬€√–”« ¿ –≈À»«¿
-      # ----------------------------------------------------------
-      - name: Release packages
+      # „=========================================¨
+      # ¶   10. RELEASE                           ¶
+      # L=========================================-
+      - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: awgrelease/*.ipk
